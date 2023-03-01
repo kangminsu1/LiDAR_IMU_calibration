@@ -49,30 +49,6 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(velodyne_ros::Point,
         (uint16_t, ring, ring)
 )
 
-namespace ouster_ros {
-  struct EIGEN_ALIGN16 Point {
-      PCL_ADD_POINT4D;
-      float intensity;
-      uint32_t t;
-      uint16_t reflectivity;
-      uint8_t  ring;
-      uint16_t ambient;
-      uint32_t range;
-      EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  };
-}  // namespace ouster_ros
-POINT_CLOUD_REGISTER_POINT_STRUCT(ouster_ros::Point,
-    (float, x, x)
-    (float, y, y)
-    (float, z, z)
-    (float, intensity, intensity)
-    // use std::uint32_t to avoid conflicting with pcl::uint32_t
-    (std::uint32_t, t, t)
-    (std::uint16_t, reflectivity, reflectivity)
-    (std::uint8_t, ring, ring)
-    (std::uint16_t, ambient, ambient)
-    (std::uint32_t, range, range)
-)
 // namespace pandar_ros
 namespace pandar_ros {
     struct EIGEN_ALIGN16 Point {
@@ -92,28 +68,6 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(pandar_ros::Point,
                                           (std::uint16_t, ring, ring)
 )
 
-//ANCHOR robosense modify
-namespace robosense_ros {
-    struct EIGEN_ALIGN16 Point {
-        PCL_ADD_POINT4D;
-        std::uint8_t intensity;
-        std::uint16_t ring;
-        double timestamp;
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    };
-}
-
-// namespace robosense_ros
-POINT_CLOUD_REGISTER_POINT_STRUCT(robosense_ros::Point,
-                                  (float, x, x)
-                                          (float, y, y)
-                                          (float, z, z)
-                                          // use std::uint32_t to avoid conflicting with pcl::uint32_t
-                                          (std::uint8_t, intensity, intensity)
-                                          (std::uint16_t, ring, ring)
-                                          (double, timestamp, timestamp)
-)
-
 class Preprocess
 {
   public:
@@ -122,8 +76,6 @@ class Preprocess
   Preprocess();
   ~Preprocess();
   
-  void process(const livox_ros_driver::CustomMsg::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
-  void process_cut_frame_livox(const livox_ros_driver::CustomMsg::ConstPtr &msg, deque<PointCloudXYZI::Ptr> &pcl_out, deque<double> &time_lidar, const int required_frame_num, int scan_count);
   void process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
   void process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg, deque<PointCloudXYZI::Ptr> &pcl_out, deque<double> &time_lidar, const int required_frame_num, int scan_count);
   void set(bool feat_en, int lid_type, double bld, int pfilt_num);
@@ -139,8 +91,6 @@ class Preprocess
     
 
   private:
-  void avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg);
-  void oust_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void velodyne_handler_kitti(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void l515_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);

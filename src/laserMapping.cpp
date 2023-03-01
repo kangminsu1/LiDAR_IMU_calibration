@@ -1,37 +1,3 @@
-// This is an advanced implementation of the algorithm described in the
-// following paper:
-//   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
-//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
-
-// Modifier: Livox               dev@livoxtech.com
-
-// Copyright 2013, Ji Zhang, Carnegie Mellon University
-// Further contributions copyright (c) 2016, Southwest Research Institute
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//#include "ros/package.h"
-// 1. Redistributions of source code must retain the above copyright notice,
-//    this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its
-//    contributors may be used to endorse or promote products derived from this
-//    software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
 #include <omp.h>
 #include "IMU_Processing.hpp"
 #include "ros/package.h"
@@ -46,7 +12,6 @@
 #include <pcl/io/pcd_io.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
-#include <livox_ros_driver/CustomMsg.h>
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
 #include <LI_init/LI_init.h>
@@ -306,43 +271,6 @@ void lasermap_fov_segment() {
 
 double timediff_imu_wrt_lidar = 0.0;
 bool timediff_set_flg = false;
-
-void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg) {
-    mtx_buffer.lock();
-    scan_count++;
-    if (msg->header.stamp.toSec() < last_timestamp_lidar) {
-        ROS_WARN("lidar loop back, clear buffer");
-        lidar_buffer.clear();
-        time_buffer.clear();
-    }
-    last_timestamp_lidar = msg->header.stamp.toSec();
-
-    if (abs(last_timestamp_imu - last_timestamp_lidar) > 1.0 && !timediff_set_flg && !imu_buffer.empty()) {
-        timediff_set_flg = true;
-        timediff_imu_wrt_lidar = last_timestamp_imu - last_timestamp_lidar;
-        printf("Self sync IMU and LiDAR, HARD time lag is %.10lf \n \n", timediff_imu_wrt_lidar);
-    }
-
-    if (cut_frame) {
-        deque<PointCloudXYZI::Ptr> ptr;
-        deque<double> timestamp_lidar;
-        p_pre->process_cut_frame_livox(msg, ptr, timestamp_lidar, cut_frame_num, scan_count);
-
-        while (!ptr.empty() && !timestamp_lidar.empty()) {
-            lidar_buffer.push_back(ptr.front());
-            ptr.pop_front();
-            time_buffer.push_back(timestamp_lidar.front() / double(1000));//unit:s
-            timestamp_lidar.pop_front();
-        }
-    } else {
-        PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
-        p_pre->process(msg, ptr);
-        lidar_buffer.push_back(ptr);
-        time_buffer.push_back(last_timestamp_lidar);
-    }
-    mtx_buffer.unlock();
-    sig_buffer.notify_all();
-}
 
 void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg) {
     mtx_buffer.lock();
@@ -767,8 +695,8 @@ int main(int argc, char **argv) {
     nh.param<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
     nh.param<int>("point_filter_num", p_pre->point_filter_num, 2);
     nh.param<string>("map_file_path", map_file_path, "");
-    nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
-    nh.param<string>("common/imu_topic", imu_topic, "/livox/imu");
+    nh.param<string>("common/lid_topic", lid_topic, "/hesai/lidar");
+    nh.param<string>("common/imu_topic", imu_topic, "/imu/data");
     nh.param<double>("mapping/filter_size_surf", filter_size_surf_min, 0.5);
     nh.param<double>("mapping/filter_size_map", filter_size_map_min, 0.5);
     nh.param<double>("cube_side_length", cube_len, 200);
@@ -860,9 +788,7 @@ int main(int argc, char **argv) {
 
 
     /*** ROS subscribe initialization ***/
-    ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? \
-        nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : \
-         nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
+    ros::Subscriber sub_pcl = nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
 
     ros::Publisher pubIMU_sync = nh.advertise<sensor_msgs::Imu>
             ("/livox/imu/async", 100000);
