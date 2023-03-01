@@ -76,7 +76,6 @@ class Preprocess
   Preprocess();
   ~Preprocess();
   
-  void process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
   void process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg, deque<PointCloudXYZI::Ptr> &pcl_out, deque<double> &time_lidar, const int required_frame_num, int scan_count);
   void set(bool feat_en, int lid_type, double bld, int pfilt_num);
 
@@ -91,9 +90,6 @@ class Preprocess
     
 
   private:
-  void velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  void velodyne_handler_kitti(const sensor_msgs::PointCloud2::ConstPtr &msg);
-  void l515_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void give_feature(PointCloudXYZI &pl, vector<orgtype> &types);
   void pub_func(PointCloudXYZI &pl, const ros::Time &ct);
   int  plane_judge(const PointCloudXYZI &pl, vector<orgtype> &types, uint i, uint &i_nex, Eigen::Vector3d &curr_direct);

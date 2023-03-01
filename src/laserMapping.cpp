@@ -288,21 +288,14 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg) {
         printf("Self sync IMU and LiDAR, HARD time lag is %.10lf \n \n", timediff_imu_wrt_lidar);
     }
 
-    if ((lidar_type == VELO || lidar_type == OUSTER || lidar_type == PANDAR || lidar_type == ROBOSENSE) && cut_frame) {
-        deque<PointCloudXYZI::Ptr> ptr;
-        deque<double> timestamp_lidar;
-        p_pre->process_cut_frame_pcl2(msg, ptr, timestamp_lidar, cut_frame_num, scan_count);
-        while (!ptr.empty() && !timestamp_lidar.empty()) {
-            lidar_buffer.push_back(ptr.front());
-            ptr.pop_front();
-            time_buffer.push_back(timestamp_lidar.front() / double(1000));//unit:s
-            timestamp_lidar.pop_front();
-        }
-    } else {
-        PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
-        p_pre->process(msg, ptr);
-        lidar_buffer.push_back(ptr);
-        time_buffer.push_back(msg->header.stamp.toSec());
+    deque<PointCloudXYZI::Ptr> ptr;
+    deque<double> timestamp_lidar;
+    p_pre->process_cut_frame_pcl2(msg, ptr, timestamp_lidar, cut_frame_num, scan_count);
+    while (!ptr.empty() && !timestamp_lidar.empty()) {
+        lidar_buffer.push_back(ptr.front());
+        ptr.pop_front();
+        time_buffer.push_back(timestamp_lidar.front() / double(1000));//unit:s
+        timestamp_lidar.pop_front();
     }
     mtx_buffer.unlock();
     sig_buffer.notify_all();
@@ -406,38 +399,6 @@ bool sync_packages(MeasureGroup &meas) {
     lidar_pushed = false;
     return true;
 }
-
-bool sync_packages_only_lidar(MeasureGroup &meas) {
-    if (lidar_buffer.empty())
-        return false;
-
-    /** push a lidar scan **/
-    if (!lidar_pushed) {
-        meas.lidar = lidar_buffer.front();
-
-        if (meas.lidar->points.size() <= 1) {
-            ROS_WARN("Too few input point cloud!\n");
-            lidar_buffer.pop_front();
-            time_buffer.pop_front();
-            return false;
-        }
-
-        meas.lidar_beg_time = time_buffer.front(); //unit:s
-
-        if (lidar_type == L515)
-            lidar_end_time = meas.lidar_beg_time;
-        else
-            lidar_end_time = meas.lidar_beg_time + meas.lidar->points.back().curvature / double(1000); //unit:s
-
-        lidar_pushed = true;
-    }
-
-    lidar_buffer.pop_front();
-    time_buffer.pop_front();
-    lidar_pushed = false;
-    return true;
-}
-
 
 int process_increments = 0;
 
@@ -612,14 +573,6 @@ void publish_odometry(const ros::Publisher &pubOdomAftMapped) {
     br.sendTransform(tf::StampedTransform(transform, odomAftMapped.header.stamp, "camera_init", "aft_mapped"));
 }
 
-void publish_mavros(const ros::Publisher &mavros_pose_publisher) {
-    msg_body_pose.header.stamp = ros::Time().fromSec(lidar_end_time);
-
-    msg_body_pose.header.frame_id = "camera_odom_frame";
-    set_posestamp(msg_body_pose.pose);
-    mavros_pose_publisher.publish(msg_body_pose);
-}
-
 void publish_path(const ros::Publisher pubPath) {
     set_posestamp(msg_body_pose.pose);
     msg_body_pose.header.stamp = ros::Time().fromSec(lidar_end_time);
@@ -745,7 +698,6 @@ int main(int argc, char **argv) {
 
     _featsArray.reset(new PointCloudXYZI());
 
-
     memset(point_selected_surf, true, sizeof(point_selected_surf));
     memset(res_last, -1000.0f, sizeof(res_last));
     downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
@@ -825,7 +777,6 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-
             if (feats_undistort->empty() || (feats_undistort == NULL)) {
                 first_lidar_time = Measures.lidar_beg_time;
                 p_imu->first_lidar_time = first_lidar_time;
@@ -834,10 +785,6 @@ int main(int argc, char **argv) {
 
             p_imu->Process(Measures, state, feats_undistort);
             state_propagat = state;
-
-
-
-
 
             /*** Segment the map in lidar FOV ***/
             lasermap_fov_segment();
@@ -861,27 +808,21 @@ int main(int argc, char **argv) {
             int featsFromMapNum = ikdtree.validnum();
             kdtree_size_st = ikdtree.size();
 
-
             /*** ICP and iterated Kalman filter update ***/
             normvec->resize(feats_down_size);
             feats_down_world->resize(feats_down_size);
             euler_cur = RotMtoEuler(state.rot_end);
-
 
             pointSearchInd_surf.resize(feats_down_size);
             Nearest_Points.resize(feats_down_size);
             int rematch_num = 0;
             bool nearest_search_en = true;
 
-
             /*** iterated state estimation ***/
             std::vector<M3D> body_var;
             std::vector<M3D> crossmat_list;
             body_var.reserve(feats_down_size);
             crossmat_list.reserve(feats_down_size);
-
-
-
 
             for (iterCount = 0; iterCount < NUM_MAX_ITERATIONS; iterCount++) {
 
@@ -890,7 +831,7 @@ int main(int argc, char **argv) {
                 total_residual = 0.0;
 
                 /** closest surface search and residual computation **/
-                #ifdef MP_EN
+                // #ifdef MP_EN
                     omp_set_num_threads(MP_PROC_NUM);
                     #pragma omp parallel for
                 for (int i = 0; i < feats_down_size; i++) {
@@ -1061,7 +1002,7 @@ int main(int argc, char **argv) {
                 if (EKF_stop_flg) break;
             }
 
-            #endif
+            // #endif
 
 
             /******* Publish odometry *******/
@@ -1086,7 +1027,6 @@ int main(int argc, char **argv) {
             last_rot = state.rot_end;
             publish_effect_world(pubLaserCloudEffect);
             if (path_en) publish_path(pubPath);
-            //publish_mavros(mavros_pose_publisher);
 
             frame_num++;
             V3D ext_euler = RotMtoEuler(state.offset_R_L_I);
